@@ -353,13 +353,25 @@ static void SetSysClock(void)
 
   if (HSEStatus == (uint32_t)0x01)
   {
-    /* Select regulator voltage output Scale 1 mode, System frequency up to 168 MHz */
+    /* Select regulator voltage range 1 and wait for the regulator to settle.
+       VOS = 0b11 is reserved, so the field is written instead of OR-ed. */
     RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
     RCC_SYNC();
-    PWR->CR1 |= PWR_CR1_VOS;
+    PWR->CR1 = (PWR->CR1 & ~PWR_CR1_VOS) | PWR_CR1_VOS_0;
+    while((PWR->SR2 & PWR_SR2_VOSF) != 0) { }
 
+#ifdef SYSCLK_FREQ_170MHz
+    /* Above 150MHz the regulator must be in range 1 boost mode. Sequence from
+       RM0440, section "Dynamic voltage scaling management": divide HCLK by 2,
+       clear R1MODE, set the wait states, switch to the new clock, wait at
+       least 1us, then restore the AHB prescaler.
+       https://www.st.com/resource/en/reference_manual/rm0440-stm32g4-series-advanced-armbased-32bit-mcus-stmicroelectronics.pdf */
+    RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_HPRE) | RCC_CFGR_HPRE_DIV2;
+    PWR->CR5 &= ~PWR_CR5_R1MODE;
+#else
     /* HCLK = SYSCLK */
     RCC->CFGR |= RCC_CFGR_HPRE_DIV1;
+#endif
 
     /* PCLK2 = HCLK */
     RCC->CFGR |= RCC_CFGR_PPRE2_DIV1;
@@ -380,8 +392,10 @@ static void SetSysClock(void)
     /* Wait till the main PLL is ready */
     while((RCC->CR & RCC_CR_PLLRDY) == 0) { }
 
-    /* Configure Flash prefetch, Instruction cache, Data cache and wait state */
-    FLASH->ACR = FLASH_ACR_ICEN
+    /* Configure instruction cache, data cache and wait states. Keep the other
+       FLASH_ACR bits: writing DBG_SWEN to 0 would disable the debug port. */
+    FLASH->ACR = (FLASH->ACR & ~FLASH_ACR_LATENCY)
+               | FLASH_ACR_ICEN
                | FLASH_ACR_DCEN
     #ifdef SYSCLK_FREQ_170MHz
                | FLASH_ACR_LATENCY_4WS;
@@ -397,6 +411,12 @@ static void SetSysClock(void)
 
     /* Wait till the main PLL is used as system clock source */
     while ((RCC->CFGR & (uint32_t)RCC_CFGR_SWS ) != RCC_CFGR_SWS_PLL) { }
+
+#ifdef SYSCLK_FREQ_170MHz
+    /* At least 1us at HCLK = 85MHz before switching to HCLK = SYSCLK */
+    for(__IO uint32_t i = 0; i < 200; i++) { }
+    RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_HPRE) | RCC_CFGR_HPRE_DIV1;
+#endif
   }
   else
   { /* If HSE fails to start-up, the application will have wrong clock

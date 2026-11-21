@@ -10,6 +10,13 @@
 #include "stm32g4xx.h"
 #include "pinmap.h"
 
+/* ADC1 input channels, see the pin map */
+enum AdcChannel {
+    ADC_BASEBAND_IN_CH = 2,
+    ADC_AUDIO_IN_CH = 3,
+    ADC_HWVER_CH = 4,
+};
+
 /* Screen dimensions */
 #define CONFIG_SCREEN_WIDTH 128
 #define CONFIG_SCREEN_HEIGHT 64

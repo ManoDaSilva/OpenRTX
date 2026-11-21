@@ -236,7 +236,6 @@ stm32f405_src = ['platform/mcu/STM32F4xx/boot/startup.cpp',
                  'platform/drivers/NVM/flash_stm32f4.c',
                  'platform/drivers/audio/stm32_dac.cpp',
                  'platform/drivers/audio/stm32_adc.cpp',
-                 'platform/drivers/audio/stm32_adc.cpp',
                  'platform/drivers/audio/stm32_pwm.cpp',
                  'platform/drivers/keyboard/cap1206.c',
                  'platform/mcu/CMSIS/Device/ST/STM32F4xx/Source/system_stm32f4xx.c']
@@ -325,7 +324,6 @@ stm32h743_src = ['platform/mcu/STM32H7xx/boot/startup.cpp',
                  'platform/drivers/GPS/nmea_rbuf.c',
                  'platform/drivers/NVM/flash_stm32h7.c',
                  'platform/drivers/audio/stm32_dac.cpp',
-                 'platform/drivers/audio/stm32_adc.cpp',
                  'platform/drivers/audio/stm32_adc.cpp',
                  'platform/mcu/CMSIS/Device/ST/STM32H7xx/Source/system_stm32h7xx.c']
 
@@ -669,7 +667,7 @@ rt4d_def += openrtx_def + at32f423_def
 micro17_src = ['platform/targets/Micro17/platform.c',
                'platform/drivers/baseband/radio_Micro17.cpp',
                'platform/drivers/NVM/nvmem_Micro17.c',
-               'platform/drivers/stubs/audio_stub.c',
+               'platform/drivers/audio/audio_Micro17.c',
                'platform/drivers/stubs/cps_io_stub.c',
                'platform/drivers/stubs/display_stub.c',
                'platform/drivers/stubs/keyboard_stub.c']

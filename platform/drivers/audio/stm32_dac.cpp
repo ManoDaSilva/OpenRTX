@@ -24,6 +24,31 @@
 typedef Lptim          timebase_type;
 #define TimebaseCh1    Lptim(LPTIM1_BASE, 168000000)
 #define TimebaseCh2    Lptim(LPTIM2_BASE, 168000000)
+
+using DacDmaCh1 = DmaStream< DMA1_BASE, 5, 7, 3 >; // DMA 1, Stream 5, channel 7, very high priority
+using DacDmaCh2 = DmaStream< DMA1_BASE, 6, 7, 3 >; // DMA 1, Stream 6, channel 7, very high priority
+#define DacDmaCh1_IRQHandler    DMA1_Stream5_IRQHandler
+#define DacDmaCh2_IRQHandler    DMA1_Stream6_IRQHandler
+#elif defined(STM32G473xx)
+#include "Timer.hpp"
+
+/*
+ * Trigger selection and DMAMUX request IDs from the STM32G4 HAL,
+ * stm32g4xx_hal_dac.h (DAC_TRIGGER_T6_TRGO, DAC_TRIGGER_T7_TRGO) and
+ * stm32g4xx_hal_dma.h (DMA_REQUEST_DAC1_CHANNEL1/2).
+ * https://github.com/STMicroelectronics/stm32g4xx_hal_driver
+ */
+#define DAC_TRIG_CH1    (7 << DAC_CR_TSEL1_Pos)     // TIM6_TRGO
+#define DAC_TRIG_CH2    (2 << DAC_CR_TSEL2_Pos)     // TIM7_TRGO
+
+typedef Timer          timebase_type;
+#define TimebaseCh1    Timer(TIM6_BASE)
+#define TimebaseCh2    Timer(TIM7_BASE)
+
+using DacDmaCh1 = DmaStream< DMA1_BASE, 1, 6, 3 >; // DMA 1, Channel 1, DAC1_CH1 request, very high priority
+using DacDmaCh2 = DmaStream< DMA1_BASE, 2, 7, 3 >; // DMA 1, Channel 2, DAC1_CH2 request, very high priority
+#define DacDmaCh1_IRQHandler    DMA1_Channel1_IRQHandler
+#define DacDmaCh2_IRQHandler    DMA1_Channel2_IRQHandler
 #else
 #include "Timer.hpp"
 
@@ -33,6 +58,11 @@ typedef Lptim          timebase_type;
 typedef Timer          timebase_type;
 #define TimebaseCh1    Timer(TIM6_BASE)
 #define TimebaseCh2    Timer(TIM7_BASE)
+
+using DacDmaCh1 = DmaStream< DMA1_BASE, 5, 7, 3 >; // DMA 1, Stream 5, channel 7, very high priority
+using DacDmaCh2 = DmaStream< DMA1_BASE, 6, 7, 3 >; // DMA 1, Stream 6, channel 7, very high priority
+#define DacDmaCh1_IRQHandler    DMA1_Stream5_IRQHandler
+#define DacDmaCh2_IRQHandler    DMA1_Stream6_IRQHandler
 #endif
 
 struct ChannelState
@@ -49,9 +79,6 @@ struct DacChannel
 };
 
 
-using Dma1_Stream5 = DmaStream< DMA1_BASE, 5, 7, 3 >; // DMA 1, Stream 5, channel 7, very high priority
-using Dma1_Stream6 = DmaStream< DMA1_BASE, 6, 7, 3 >; // DMA 1, Stream 6, channel 7, very high priority
-
 static constexpr DacChannel channels[] =
 {
     {&(DAC->DHR12R1), TimebaseCh1},
@@ -64,12 +91,12 @@ struct ChannelState chState[] =
     {
         .ctx = NULL,
         .idleLevel = 0,
-        .stream = Dma1_Stream5::init(10, DataSize::_16BIT, 1)
+        .stream = DacDmaCh1::init(10, DataSize::_16BIT, 1)
     },
     {
         .ctx = NULL,
         .idleLevel = 0,
-        .stream = Dma1_Stream6::init(10, DataSize::_16BIT, 1)
+        .stream = DacDmaCh2::init(10, DataSize::_16BIT, 1)
     }
 };
 #pragma GCC diagnostic pop
@@ -97,13 +124,13 @@ static void stopTransfer(const uint8_t chNum)
 void __attribute__((used)) DMA_Handler(uint32_t chNum)
 {
     if(chNum == 0)
-        Dma1_Stream5::IRQhandleInterrupt(&chState[chNum].stream);
+        DacDmaCh1::IRQhandleInterrupt(&chState[chNum].stream);
     else
-        Dma1_Stream6::IRQhandleInterrupt(&chState[chNum].stream);
+        DacDmaCh2::IRQhandleInterrupt(&chState[chNum].stream);
 }
 
-// DMA 1, Stream 5: data transfer for RTX sink
-void __attribute__((used)) DMA1_Stream5_IRQHandler()
+// DMA transfer for DAC channel 1
+void __attribute__((used)) DacDmaCh1_IRQHandler()
 {
     saveContext();
     asm volatile("mov r0, #0");
@@ -111,8 +138,8 @@ void __attribute__((used)) DMA1_Stream5_IRQHandler()
     restoreContext();
 }
 
-// DMA 1, Stream 6: data transfer for speaker sink
-void __attribute__((used)) DMA1_Stream6_IRQHandler()
+// DMA transfer for DAC channel 2
+void __attribute__((used)) DacDmaCh2_IRQHandler()
 {
     saveContext();
     asm volatile("mov r0, #1");
@@ -127,6 +154,16 @@ void stm32dac_init(const uint8_t instance, const uint16_t idleLevel)
     // Enable peripherals
     #if defined(STM32H743xx)
     RCC->APB1LENR |= RCC_APB1LENR_DAC12EN;
+    #elif defined(STM32G473xx)
+    RCC->AHB2ENR |= RCC_AHB2ENR_DAC1EN;
+    __DSB();
+
+    // The DAC bus interface needs its high frequency mode above 80MHz
+    // (RM0440, DAC_MCR register). Mode bits at zero: buffered output on pin.
+    if(SystemCoreClock > 160000000)
+        DAC->MCR = DAC_MCR_HFSEL_1;
+    else if(SystemCoreClock > 80000000)
+        DAC->MCR = DAC_MCR_HFSEL_0;
     #else
     RCC->APB1ENR |= RCC_APB1ENR_DACEN;
     #endif
@@ -139,6 +176,8 @@ void stm32dac_init(const uint8_t instance, const uint16_t idleLevel)
             RCC->APB1LENR |= RCC_APB1LENR_LPTIM1EN;
             RCC->D2CCIP2R |= RCC_D2CCIP2R_LPTIM1SEL_0;
             DMAMUX1_Channel5->CCR = 67;
+            #elif defined(STM32G473xx)
+            RCC->APB1ENR1 |= RCC_APB1ENR1_TIM6EN;
             #else
             RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
             #endif
@@ -148,6 +187,10 @@ void stm32dac_init(const uint8_t instance, const uint16_t idleLevel)
             DAC->CR |= DAC_CR_DMAEN1    // Enable DMA
                     | DAC_TRIG_CH1      // Set trigger source for CH1
                     | DAC_CR_EN1;       // Enable CH1
+
+            #if defined(STM32G473xx)
+            while((DAC->SR & DAC_SR_DAC1RDY) == 0) ;
+            #endif
         }
             break;
 
@@ -157,6 +200,8 @@ void stm32dac_init(const uint8_t instance, const uint16_t idleLevel)
             RCC->APB4ENR |= RCC_APB4ENR_LPTIM2EN;
             RCC->D3CCIPR |= RCC_D3CCIPR_LPTIM2SEL_0;
             DMAMUX1_Channel6->CCR = 68;
+            #elif defined(STM32G473xx)
+            RCC->APB1ENR1 |= RCC_APB1ENR1_TIM7EN;
             #else
             RCC->APB1ENR |= RCC_APB1ENR_TIM7EN;
             #endif
@@ -166,6 +211,10 @@ void stm32dac_init(const uint8_t instance, const uint16_t idleLevel)
             DAC->CR |= DAC_CR_DMAEN2    // Enable DMA
                     | DAC_TRIG_CH2      // Set trigger source for CH2
                     | DAC_CR_EN2;       // Enable CH2
+
+            #if defined(STM32G473xx)
+            while((DAC->SR & DAC_SR_DAC2RDY) == 0) ;
+            #endif
         }
             break;
 
@@ -192,6 +241,9 @@ void stm32dac_terminate()
     #if defined(STM32H743xx)
     RCC->APB1LENR &= ~(RCC_APB1LENR_DAC12EN | RCC_APB1LENR_LPTIM1EN);
     RCC->APB4ENR  &= ~RCC_APB4ENR_LPTIM2EN;
+    #elif defined(STM32G473xx)
+    RCC->AHB2ENR  &= ~RCC_AHB2ENR_DAC1EN;
+    RCC->APB1ENR1 &= ~(RCC_APB1ENR1_TIM6EN | RCC_APB1ENR1_TIM7EN);
     #else
     RCC->APB1ENR &= ~(RCC_APB1ENR_DACEN  | RCC_APB1ENR_TIM6EN | RCC_APB1ENR_TIM7EN);
     #endif

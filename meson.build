@@ -261,6 +261,7 @@ stm32g473_src = ['platform/mcu/STM32G4xx/boot/startup.cpp',
                  'platform/mcu/STM32G4xx/boot/libc_integration.cpp',
                  'platform/mcu/STM32G4xx/drivers/delays.cpp',
                  'platform/drivers/GPIO/gpio_stm32.c',
+                 'platform/drivers/audio/stm32_dac.cpp',
                  'platform/mcu/CMSIS/Device/ST/STM32G4xx/Source/system_stm32g4xx.c']
 
 stm32g473_inc = ['platform/mcu/CMSIS/Include',

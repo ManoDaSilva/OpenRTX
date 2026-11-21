@@ -21,6 +21,13 @@ typedef Lptim          timebase_type;
 #define TimebaseCh1    Lptim(LPTIM3_BASE, 168000000)
 #define TimebaseCh2    Lptim(LPTIM3_BASE, 168000000)
 #define TimebaseCh3    Lptim(LPTIM3_BASE, 168000000)
+#elif defined(STM32G473xx)
+#include "Timer.hpp"
+
+typedef Timer          timebase_type;
+#define TimebaseCh1    Timer(TIM2_BASE)
+#define TimebaseCh2    Timer(TIM2_BASE)
+#define TimebaseCh3    Timer(TIM2_BASE)
 #else
 #include "Timer.hpp"
 
@@ -37,21 +44,46 @@ struct AdcPeriph
     timebase_type  tim;
 };
 
-using Dma2_Stream0 = DmaStream< DMA2_BASE, 0, 0, 2 >; // DMA 2, Stream 2, channel 0, high priority (ADC1)
-using Dma2_Stream1 = DmaStream< DMA2_BASE, 1, 2, 2 >; // DMA 2, Stream 2, channel 2, high priority (ADC3)
-using Dma2_Stream2 = DmaStream< DMA2_BASE, 2, 1, 2 >; // DMA 2, Stream 2, channel 1, high priority (ADC2)
+#if defined(STM32G473xx)
+/*
+ * DMAMUX request IDs from the STM32G4 HAL, stm32g4xx_hal_dma.h
+ * (DMA_REQUEST_ADC1/2/3).
+ * https://github.com/STMicroelectronics/stm32g4xx_hal_driver
+ */
+using AdcDma1 = DmaStream< DMA1_BASE, 3,  5, 2 >; // DMA 1, Channel 3, high priority (ADC1)
+using AdcDma2 = DmaStream< DMA1_BASE, 4, 36, 2 >; // DMA 1, Channel 4, high priority (ADC2)
+using AdcDma3 = DmaStream< DMA1_BASE, 5, 37, 2 >; // DMA 1, Channel 5, high priority (ADC3)
+#define AdcDma1_IRQHandler    DMA1_Channel3_IRQHandler
+#define AdcDma2_IRQHandler    DMA1_Channel4_IRQHandler
+#define AdcDma3_IRQHandler    DMA1_Channel5_IRQHandler
 
-StreamHandler Dma2_Stream0_hdl = Dma2_Stream0::init(10, DataSize::_16BIT, false);
-StreamHandler Dma2_Stream1_hdl = Dma2_Stream1::init(10, DataSize::_16BIT, false);
-StreamHandler Dma2_Stream2_hdl = Dma2_Stream2::init(10, DataSize::_16BIT, false);
+/*
+ * Sampling time of 47.5 ADC clock cycles for all the channels (SMPx = 0b100,
+ * RM0440 ADC_SMPR1/ADC_SMPR2): with the ADC clocked at HCLK/4 a conversion
+ * takes 60 cycles, about 1.4us.
+ */
+#define ADC_SMPR1_ALL_47CYC    0x24924924
+#define ADC_SMPR2_ALL_47CYC    0x04924924
+#else
+using AdcDma1 = DmaStream< DMA2_BASE, 0, 0, 2 >; // DMA 2, Stream 0, channel 0, high priority (ADC1)
+using AdcDma2 = DmaStream< DMA2_BASE, 2, 1, 2 >; // DMA 2, Stream 2, channel 1, high priority (ADC2)
+using AdcDma3 = DmaStream< DMA2_BASE, 1, 2, 2 >; // DMA 2, Stream 1, channel 2, high priority (ADC3)
+#define AdcDma1_IRQHandler    DMA2_Stream0_IRQHandler
+#define AdcDma2_IRQHandler    DMA2_Stream2_IRQHandler
+#define AdcDma3_IRQHandler    DMA2_Stream1_IRQHandler
+#endif
+
+StreamHandler AdcDma1_hdl = AdcDma1::init(10, DataSize::_16BIT, false);
+StreamHandler AdcDma2_hdl = AdcDma2::init(10, DataSize::_16BIT, false);
+StreamHandler AdcDma3_hdl = AdcDma3::init(10, DataSize::_16BIT, false);
 
 static struct streamCtx *AdcContext[3];
 
 static constexpr AdcPeriph periph[] =
 {
-    {(ADC_TypeDef *) ADC1_BASE, &Dma2_Stream0_hdl, TimebaseCh1},
-    {(ADC_TypeDef *) ADC2_BASE, &Dma2_Stream2_hdl, TimebaseCh2},
-    {(ADC_TypeDef *) ADC3_BASE, &Dma2_Stream1_hdl, TimebaseCh3},
+    {(ADC_TypeDef *) ADC1_BASE, &AdcDma1_hdl, TimebaseCh1},
+    {(ADC_TypeDef *) ADC2_BASE, &AdcDma2_hdl, TimebaseCh2},
+    {(ADC_TypeDef *) ADC3_BASE, &AdcDma3_hdl, TimebaseCh3},
 };
 
 
@@ -63,7 +95,7 @@ static void stopTransfer(const uint8_t instNum)
 {
     ADC_TypeDef *adc = periph[instNum].adc;
 
-    #ifdef STM32H743xx
+    #if defined(STM32H743xx) || defined(STM32G473xx)
     adc->CR |= ADC_CR_ADSTP;
     while((adc->CR & ADC_CR_ADSTP) != 0) ;
     #else
@@ -83,21 +115,21 @@ void __attribute__((used)) ADC_DMA_Handler(uint32_t instNum)
     switch(instNum)
     {
         case 0:
-            Dma2_Stream0::IRQhandleInterrupt(periph[instNum].stream);
+            AdcDma1::IRQhandleInterrupt(periph[instNum].stream);
             break;
 
         case 1:
-            Dma2_Stream2::IRQhandleInterrupt(periph[instNum].stream);
+            AdcDma2::IRQhandleInterrupt(periph[instNum].stream);
             break;
 
         case 2:
-            Dma2_Stream1::IRQhandleInterrupt(periph[instNum].stream);
+            AdcDma3::IRQhandleInterrupt(periph[instNum].stream);
             break;
     }
 }
 
-// DMA 2, Stream 0: data transfer for ADC1
-void __attribute__((used)) DMA2_Stream0_IRQHandler()
+// DMA transfer for ADC1
+void __attribute__((used)) AdcDma1_IRQHandler()
 {
     saveContext();
     asm volatile("mov r0, #0");
@@ -105,8 +137,8 @@ void __attribute__((used)) DMA2_Stream0_IRQHandler()
     restoreContext();
 }
 
-// DMA 2, Stream 2: data transfer for ADC2
-void __attribute__((used)) DMA2_Stream2_IRQHandler()
+// DMA transfer for ADC2
+void __attribute__((used)) AdcDma2_IRQHandler()
 {
     saveContext();
     asm volatile("mov r0, #1");
@@ -114,8 +146,8 @@ void __attribute__((used)) DMA2_Stream2_IRQHandler()
     restoreContext();
 }
 
-// DMA 2, Stream 1: data transfer for ADC3
-void __attribute__((used)) DMA2_Stream1_IRQHandler()
+// DMA transfer for ADC3
+void __attribute__((used)) AdcDma3_IRQHandler()
 {
     saveContext();
     asm volatile("mov r0, #2");
@@ -136,6 +168,10 @@ void stm32adc_init(const uint8_t instance)
             ADC12_COMMON->CCR = ADC_CCR_CKMODE_1
                               | ADC_CCR_CKMODE_0;
             DMAMUX1_Channel8->CCR = 9;
+            #elif defined(STM32G473xx)
+            RCC->AHB2ENR       |= RCC_AHB2ENR_ADC12EN;
+            ADC12_COMMON->CCR  |= ADC_CCR_CKMODE_1   // HCLK/4, max is 60MHz
+                               |  ADC_CCR_CKMODE_0;
             #else
             RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
             #endif
@@ -147,6 +183,10 @@ void stm32adc_init(const uint8_t instance)
             ADC12_COMMON->CCR = ADC_CCR_CKMODE_1
                               | ADC_CCR_CKMODE_0;
             DMAMUX1_Channel10->CCR = 10;
+            #elif defined(STM32G473xx)
+            RCC->AHB2ENR       |= RCC_AHB2ENR_ADC12EN;
+            ADC12_COMMON->CCR  |= ADC_CCR_CKMODE_1
+                               |  ADC_CCR_CKMODE_0;
             #else
             RCC->APB2ENR |= RCC_APB2ENR_ADC2EN;
             #endif
@@ -158,6 +198,10 @@ void stm32adc_init(const uint8_t instance)
             ADC3_COMMON->CCR = ADC_CCR_CKMODE_1
                              | ADC_CCR_CKMODE_0;
             DMAMUX1_Channel9->CCR = 115;
+            #elif defined(STM32G473xx)
+            RCC->AHB2ENR       |= RCC_AHB2ENR_ADC345EN;
+            ADC345_COMMON->CCR |= ADC_CCR_CKMODE_1
+                               |  ADC_CCR_CKMODE_0;
             #else
             RCC->APB2ENR |= RCC_APB2ENR_ADC3EN;
             #endif
@@ -172,6 +216,11 @@ void stm32adc_init(const uint8_t instance)
     RCC->APB4ENR |= RCC_APB4ENR_LPTIM3EN;
     RCC->D3CCIPR |= RCC_D3CCIPR_LPTIM345SEL_0;
     uint32_t adcTrig = 20 << ADC_CFGR_EXTSEL_Pos;    // lptim3_out as trig. source
+    #elif defined(STM32G473xx)
+    // TIM2_TRGO as trigger source, from the STM32G4 HAL, stm32g4xx_ll_adc.h
+    // (LL_ADC_REG_TRIG_EXT_TIM2_TRGO)
+    RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
+    uint32_t adcTrig = 11 << ADC_CFGR_EXTSEL_Pos;
     #else
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
     ADC->CCR     |= ADC_CCR_ADCPRE_0;
@@ -202,6 +251,34 @@ void stm32adc_init(const uint8_t instance)
               |  ADC_CFGR_RES_1     // 12-bit resolution
               |  ADC_CFGR_DMNGT_1   // Continuous DMA requests
               |  ADC_CFGR_DMNGT_0;  // Enable DMA data transfer
+    #elif defined(STM32G473xx)
+    /*
+     * Power up sequence from RM0440, section "ADC on-off control": exit deep
+     * power down, enable the voltage regulator and wait for its start-up time
+     * (tADCVREG_STUP, 20us max), calibrate in single-ended mode, wait four ADC
+     * clock cycles, then enable the ADC.
+     */
+    adc->CR &= ~ADC_CR_DEEPPWD;
+    adc->CR |= ADC_CR_ADVREGEN;
+    delayUs(20);
+
+    adc->CR &= ~ADC_CR_ADCALDIF;
+    adc->CR |= ADC_CR_ADCAL;
+    while((adc->CR & ADC_CR_ADCAL) != 0) ;
+    delayUs(1);
+
+    adc->ISR   = ADC_ISR_ADRDY;     // Clear the ADRDY flag
+    adc->CR   |= ADC_CR_ADEN;
+    while((adc->ISR & ADC_ISR_ADRDY) == 0) ;
+
+    adc->SMPR1 = ADC_SMPR1_ALL_47CYC;
+    adc->SMPR2 = ADC_SMPR2_ALL_47CYC;
+    adc->SQR1  = 0;                 // Convert one channel
+    adc->CFGR |= ADC_CFGR_EXTEN_0   // Trigger on rising edge
+              |  adcTrig            // Trigger source, 12-bit resolution
+              |  ADC_CFGR_OVRMOD    // Overwrite data on overrun
+              |  ADC_CFGR_DMACFG    // Continuous DMA requests
+              |  ADC_CFGR_DMAEN;    // Enable DMA data transfer
     #else
     adc->SMPR2 = ADC_SMPR2_SMP2_2
                | ADC_SMPR2_SMP1_2;
@@ -232,6 +309,8 @@ void stm32adc_terminate()
     // TODO: turn off peripherals
     #ifdef STM32H743xx
     RCC->APB1LENR &= ~RCC_APB1LENR_TIM2EN;
+    #elif defined(STM32G473xx)
+    RCC->APB1ENR1 &= ~RCC_APB1ENR1_TIM2EN;
     #else
     RCC->APB1ENR &= ~RCC_APB1ENR_TIM2EN;
     #endif
@@ -260,6 +339,10 @@ static int stm32adc_start(const uint8_t instance, const void *config, struct str
     uint32_t channel = (uint32_t) config;
     adc->SQR1  = channel << ADC_SQR1_SQ1_Pos;
     adc->PCSEL = 1 << channel;
+    adc->CR   |= ADC_CR_ADSTART;
+    #elif defined(STM32G473xx)
+    uint32_t channel = (uint32_t) config;
+    adc->SQR1  = channel << ADC_SQR1_SQ1_Pos;
     adc->CR   |= ADC_CR_ADSTART;
     #else
     adc->SQR3 = (uint32_t) config;

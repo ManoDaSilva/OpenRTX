@@ -251,6 +251,28 @@ stm32f405_inc += miosix_cm4f_inc
 stm32f405_def += miosix_cm4f_def
 
 ##
+## STM32G473
+##
+
+stm32g473_src = ['platform/mcu/STM32G4xx/boot/startup.cpp',
+                 'platform/mcu/STM32G4xx/boot/bsp.cpp',
+                 'platform/mcu/STM32G4xx/boot/libc_integration.cpp',
+                 'platform/mcu/STM32G4xx/drivers/delays.cpp',
+                 'platform/drivers/GPIO/gpio_stm32.c',
+                 'platform/mcu/CMSIS/Device/ST/STM32G4xx/Source/system_stm32g4xx.c']
+
+stm32g473_inc = ['platform/mcu/CMSIS/Include',
+                 'platform/mcu/CMSIS/Device/ST/STM32G4xx/Include',
+                 'platform/mcu/STM32G4xx',
+                 'platform/mcu/STM32G4xx/drivers']
+
+stm32g473_def = {'STM32G473xx': '', 'HSE_VALUE':'8000000', 'SYSCLK_FREQ_170MHz':''}
+
+stm32g473_src += miosix_cm4f_src
+stm32g473_inc += miosix_cm4f_inc
+stm32g473_def += miosix_cm4f_def
+
+##
 ## MK22FN512
 ##
 

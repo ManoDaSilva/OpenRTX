@@ -84,6 +84,8 @@ ui_src_module17 = ['openrtx/src/ui/module17/ui.c',
                    'openrtx/src/ui/module17/ui_main.c',
                    'openrtx/src/ui/module17/ui_menu.c']
 
+ui_src_headless = ['openrtx/src/ui/headless/ui.c']
+
 ##
 ## Selection of main entrypoint
 ##

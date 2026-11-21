@@ -136,6 +136,7 @@ jobs:
             meson compile -C build_cm7 openrtx_cs7000p_wrap &&
             meson compile -C build_cm7 openrtx_cs7000p_dfu &&
             meson compile -C build_cm4 openrtx_rt4d_bin &&
+            meson compile -C build_cm4 openrtx_micro17_bin &&
             chmod -R a+rX build_linux build_cm4 build_cm7
       # The build runs as root in the container, so the binaries land in the
       # bind-mounted workspace owned by root. Copying rather than moving (as
@@ -162,6 +163,7 @@ jobs:
           build_cm4/openrtx_mduv3x0_wrap    openrtx_mduv3x0_${BRANCH_NAME}.bin
           build_cm4/openrtx_mod17_bin       openrtx_mod17_${BRANCH_NAME}.bin
           build_cm4/openrtx_rt4d_bin        openrtx_rt4d_${BRANCH_NAME}.bin
+          build_cm4/openrtx_micro17_bin     openrtx_micro17_${BRANCH_NAME}.bin
           EOF
       - uses: actions/upload-artifact@v4
         with:
@@ -180,6 +182,7 @@ jobs:
             ${{github.workspace}}/openrtx_mduv3x0_${{ env.BRANCH_NAME }}.bin
             ${{github.workspace}}/openrtx_mod17_${{ env.BRANCH_NAME }}.bin
             ${{github.workspace}}/openrtx_rt4d_${{ env.BRANCH_NAME }}.bin
+            ${{github.workspace}}/openrtx_micro17_${{ env.BRANCH_NAME }}.bin
           if-no-files-found: error
   # One artifact per radio, so the pull request comment can offer a direct
   # download per device. The release-bins artifact from `build` is kept as-is
@@ -207,6 +210,7 @@ jobs:
           - mduv3x0
           - mod17
           - rt4d
+          - micro17
     steps:
       - name: Download the built firmware
         uses: actions/download-artifact@v4

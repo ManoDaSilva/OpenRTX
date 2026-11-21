@@ -117,6 +117,7 @@ jobs:
               ['openrtx-cs7000p', 'Connect Systems CS7000-M17 Plus'],
               ['openrtx-rt4d',    'Radtel RT-4D'],
               ['openrtx-mod17',   'Module 17'],
+              ['openrtx-micro17', 'Micro17'],
               ['openrtx-ttwrplus', 'Lilygo T-TWR Plus'],
             ]);
 

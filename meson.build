@@ -673,7 +673,7 @@ micro17_src = ['platform/targets/Micro17/platform.c',
 micro17_inc = ['platform/targets/Micro17']
 micro17_def = {'PLATFORM_MICRO17': ''}
 
-micro17_src += openrtx_src + stm32g473_src + ui_src_default
+micro17_src += openrtx_src + stm32g473_src + ui_src_headless
 micro17_inc += openrtx_inc + stm32g473_inc
 micro17_def += openrtx_def + stm32g473_def
 

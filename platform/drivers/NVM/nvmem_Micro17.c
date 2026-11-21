@@ -15,14 +15,15 @@
  * - The radio PTT lines are both active low: the PTT button shorts PTTIN to
  *   ground, and PTTO is pulled up to 5V by the radio. See the wiring notes in
  *   https://github.com/ManoDaSilva/Micro17/tree/main/icom_ICF3_4_5_6XXX
+ * - The baseband is inverted in both directions on the ICOM IC-F radios.
  */
 struct micro17Calib micro17CalData = {
     .tx_wiper = 0x080,
     .rx_wiper = 0x080,
     .mic_wiper = 0x080,
     .spk_wiper = 0x080,
-    .bb_tx_invert = 0,
-    .bb_rx_invert = 0,
+    .bb_tx_invert = 1,
+    .bb_rx_invert = 1,
     .ptt_in_level = 0,
     .ptt_out_level = 0,
 };
